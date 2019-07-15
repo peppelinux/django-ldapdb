@@ -30,6 +30,8 @@ class Model(django.db.models.base.Model):
     def __init__(self, *args, **kwargs):
         super(Model, self).__init__(*args, **kwargs)
         self._saved_dn = self.dn
+        if self.dn:
+            self.base_dn = self.dn.split(',', 1)[1]
 
     def build_rdn(self):
         """
@@ -60,7 +62,8 @@ class Model(django.db.models.base.Model):
         connection.delete_s(self.dn)
         signals.post_delete.send(sender=self.__class__, instance=self)
 
-    def _save_table(self, raw=False, cls=None, force_insert=None, force_update=None, using=None, update_fields=None):
+    def _save_table(self, raw=False, cls=None, force_insert=None,
+                    force_update=None, using=None, update_fields=None):
         """
         Saves the current instance.
         """

@@ -5,6 +5,7 @@
 from __future__ import unicode_literals
 
 import collections
+import copy
 import re
 import sys
 
@@ -15,7 +16,7 @@ from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
 from django.db.models.sql.where import AND, OR, WhereNode
 
 from ldapdb import escape_ldap_filter
-from ldapdb.models.fields import ListField
+from ldapdb.models.fields import ListField, ExactLookup
 
 if sys.version_info[0] < 3:
     integer_types = (int, long)  # noqa: F821
@@ -53,8 +54,15 @@ def query_as_ldap(query, compiler, connection):
             and query.where.children[0].lhs.target.column == 'dn'):
 
         lookup = query.where.children[0]
-        if lookup.lookup_name != 'exact':
-            raise LdapDBError("Unsupported dn lookup: %s" % lookup.lookup_name)
+        if not isinstance(lookup, ExactLookup):
+            # TODO: follow #101
+            # raise LdapDBError("Unsupported dn lookup: %s" % lookup.lookup_name)
+            # PATCH that fixes Admin Action: delete entries
+            kwargs = copy.copy(lookup.__dict__)
+            kwargs.pop('bilateral_transforms')
+            kwargs.pop('contains_aggregate')
+            kwargs['rhs'] = kwargs['rhs'][0]
+            lookup = ExactLookup(**kwargs)
 
         return LdapLookup(
             base=lookup.rhs,

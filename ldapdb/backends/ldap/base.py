@@ -6,6 +6,8 @@ from __future__ import unicode_literals
 
 import ldap
 import ldap.controls
+import ldap.resiter
+from django.conf import settings
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.client import BaseDatabaseClient
 from django.db.backends.base.creation import BaseDatabaseCreation
@@ -268,12 +270,23 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def get_new_connection(self, conn_params):
         """Build a connection from its parameters."""
+        # TODO async
+        #class AsyncLDAPObject(ldap.ldapobject.ReconnectLDAPObject,
+                              #ldap.resiter.ResultProcessor):
+            #pass
+        
+        #connection = AsyncLDAPObject(
+            #uri=conn_params['uri'],
+            #retry_max=conn_params['retry_max'],
+            #retry_delay=conn_params['retry_delay'],
+            #bytes_mode=False)
+        
         connection = ldap.ldapobject.ReconnectLDAPObject(
             uri=conn_params['uri'],
             retry_max=conn_params['retry_max'],
             retry_delay=conn_params['retry_delay'],
             bytes_mode=False)
-
+        
         options = conn_params['options']
         for opt, value in options.items():
             if opt == 'query_timeout':
@@ -326,14 +339,16 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         with self.cursor() as cursor:
             return cursor.connection.rename_s(dn, newrdn)
 
-    def search_s(self, base, scope, filterstr='(objectClass=*)', attrlist=None):
+    def search_s(self, base, scope,
+                 filterstr='(objectClass=*)', attrlist=None,
+                 limit=getattr(settings, 'LDAP_SEARCH_LIMIT', None)):
         with self.cursor() as cursor:
             query_timeout = cursor.connection.timeout
 
             # Request pagination; don't fail if the server doesn't support it.
             ldap_control = ldap.controls.SimplePagedResultsControl(
                 criticality=False,
-                size=self.page_size,
+                size = self.page_size,
                 cookie='',
             )
 
@@ -365,6 +380,15 @@ class DatabaseWrapper(BaseDatabaseWrapper):
                 page += 1
                 if page_control.cookie:
                     ldap_control.cookie = page_control.cookie
+
+                    # TODO: IT would be better to handle a search
+                    #       cookie persistence in the user session or other
+                    #       kinds of applicative paginations to avoid to flood LDAP
+                    # if there's search limit imposed, please exit
+                    # see: https://www.python-ldap.org/en/latest/reference/ldap-async.html
+                    # also: https://www.python-ldap.org/en/latest/reference/ldap-resiter.html#module-ldap.resiter
+                    if limit and (self.page_size * page) >= limit:
+                        break
                 else:
                     # End of pages
                     break

@@ -20,7 +20,6 @@ class Model(django.db.models.base.Model):
     """
     Base class for all LDAP models.
     """
-    # this fixes: https://github.com/django-ldapdb/django-ldapdb/issues/186
     dn = ldapdb_fields.CharField(max_length=200, primary_key=True)
 
     # meta-data
